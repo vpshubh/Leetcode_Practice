@@ -40,3 +40,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    from scripts.utils import log_and_update
+    log_and_update("scripts/auto_commit_push.py")   
+# --- IGNORE ---
+
