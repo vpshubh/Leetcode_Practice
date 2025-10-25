@@ -1,7 +1,7 @@
-# Problems List
+# Solved Problems List
 
-Automatically generated. Solutions are in the `Python/` and `Java/` directories.
-
-| # | Problem | Difficulty | Python | Java |
-|---|---|---:|:---:|:---:|
-| 1 | [Two Sum](https://leetcode.com/problems/two-sum/) | Easy | ✅ |  |
+- Palindrome Number (Python/easy/palindrome_number.py)
+- Reverse String (Python/easy/reverse_string.py)
+- Two Sum (Python/easy/two_sum.py)
+- Valid Parentheses (Python/medium\valid_parentheses.py)
+- Valid Parentheses (Python/medium/valid_parentheses.py)

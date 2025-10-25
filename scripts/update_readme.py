@@ -1,104 +1,83 @@
-#!/usr/bin/env python3
 import os
 import re
-from pathlib import Path
-from collections import OrderedDict
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-PY_DIR = REPO_ROOT / "Python"
-JAVA_DIR = REPO_ROOT / "Java"
-DOCS_FILE = REPO_ROOT / "docs" / "problems_list.md"
-README_FILE = REPO_ROOT / "README.md"
+README_FILE = "README.md"
+PROBLEMS_LIST_FILE = "docs/problems_list.md"
+START_MARKER = "<!-- PROGRESS_TABLE_START -->"
+END_MARKER = "<!-- PROGRESS_TABLE_END -->"
+SOLVED_LOG = "solved_problems.txt"
 
-def extract_meta(path: Path):
-    title = None
-    link = None
-    difficulty = ""
+SOLUTION_FOLDERS = [
+    "Python/easy", "Python/medium", "Python/hard",
+    "Java/easy", "Java/medium", "Java/hard"
+]
+
+def get_title_from_file(filepath):
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            for i, line in enumerate(f):
-                if i > 40:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("# Title:"):
+                    return line.strip()[8:].strip()
+                if line.strip().startswith("// Title:"):
+                    return line.strip()[9:].strip()
+                if line.strip() and not (line.strip().startswith("#") or line.strip().startswith("//")):
                     break
-                # LeetCode: Title
-                m = re.search(r'LeetCode\s*[:\-]\s*(.+)', line, re.I)
-                if m and not title:
-                    title = m.group(1).strip()
-                m2 = re.search(r'Link\s*[:\-]\s*(https?://\S+)', line, re.I)
-                if m2 and not link:
-                    link = m2.group(1).strip().rstrip(').,')
-                m3 = re.search(r'Difficulty\s*[:\-]\s*(\w+)', line, re.I)
-                if m3 and not difficulty:
-                    difficulty = m3.group(1).strip().title()
     except Exception:
-        pass
+        return None
+    return None
 
-    if not title:
-        # derive from filename
-        name = path.stem
-        name = re.sub(r'^\d+[_\-\s]*', '', name)
-        title = name.replace('_', ' ').replace('-', ' ').title()
-    return title, link, difficulty
+def find_matching_path(logged_path):
+    if os.path.exists(logged_path):
+        return logged_path
+    fname = os.path.basename(logged_path)
+    for folder in SOLUTION_FOLDERS:
+        candidate = os.path.join(folder, fname)
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
-def scan():
-    problems = OrderedDict()  # key -> {title, link, difficulty, langs}
-    for lang, base in (("Python", PY_DIR), ("Java", JAVA_DIR)):
-        if not base.exists():
-            continue
-        for p in sorted(base.rglob("*.*")):
-            if p.suffix.lower() not in (".py", ".java"):
-                continue
-            title, link, difficulty = extract_meta(p)
-            key = link if link else title
-            if key not in problems:
-                problems[key] = {"title": title, "link": link, "difficulty": difficulty, "langs": set()}
-            problems[key]["langs"].add(lang)
-            # prefer to keep non-empty difficulty
-            if not problems[key]["difficulty"] and difficulty:
-                problems[key]["difficulty"] = difficulty
+def read_solved_problems():
+    if not os.path.exists(SOLVED_LOG):
+        return []
+    with open(SOLVED_LOG, "r") as f:
+        logged = sorted(set(line.strip() for line in f if line.strip()))
+    problems = []
+    seen = set()
+    for logged_path in logged:
+        real_path = find_matching_path(logged_path)
+        if real_path and real_path not in seen:
+            title = get_title_from_file(real_path)
+            problems.append((title or "Unknown Title", real_path))
+            seen.add(real_path)
     return problems
 
-def write_docs(problems):
-    lines = []
-    lines.append("# Problems List\n")
-    lines.append("Automatically generated. Solutions are in the `Python/` and `Java/` directories.\n")
-    lines.append("| # | Problem | Difficulty | Python | Java |")
-    lines.append("|---|---|---:|:---:|:---:|")
-    idx = 1
-    for key, entry in problems.items():
-        title = entry["title"]
-        link = entry["link"]
-        diff = entry["difficulty"] or ""
-        py = "✅" if "Python" in entry["langs"] else ""
-        java = "✅" if "Java" in entry["langs"] else ""
-        if link:
-            problem_md = f"[{title}]({link})"
-        else:
-            problem_md = title
-        lines.append(f"| {idx} | {problem_md} | {diff} | {py} | {java} |")
-        idx += 1
-    DOCS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    DOCS_FILE.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Wrote {DOCS_FILE}")
+def write_problems_list(problems):
+    os.makedirs(os.path.dirname(PROBLEMS_LIST_FILE), exist_ok=True)
+    with open(PROBLEMS_LIST_FILE, "w", encoding="utf-8") as f:
+        f.write("# Solved Problems List\n\n")
+        for title, path in problems:
+            f.write(f"- {title} ({path})\n")
 
 def update_readme(problems):
-    if not README_FILE.exists():
-        print("README.md not found; skipping README update")
-        return
-    content = README_FILE.read_text(encoding="utf-8")
-    start = "<!-- PROGRESS_TABLE_START -->"
-    end = "<!-- PROGRESS_TABLE_END -->"
-    if start in content and end in content:
-        summary = f"\nGenerated: **{len(problems)}** problems. See `docs/problems_list.md` for details.\n\n"
-        new_content = content.split(start)[0] + start + "\n" + summary + end + content.split(end)[1]
-        README_FILE.write_text(new_content, encoding="utf-8")
-        print("Updated README.md between markers")
+    with open(README_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+    if problems:
+        new_section = "Solved Problems:\n" + "\n".join(f"- {t} ({p})" for t, p in problems)
     else:
-        print("Markers not found in README.md; please add <!-- PROGRESS_TABLE_START --> and <!-- PROGRESS_TABLE_END -->")
+        new_section = "No problems solved yet."
+    pattern = re.compile(
+        rf"({re.escape(START_MARKER)})(.*)({re.escape(END_MARKER)})",
+        re.DOTALL
+    )
+    updated_content = pattern.sub(f"\\1\n{new_section}\n\\3", content)
+    with open(README_FILE, "w", encoding="utf-8") as f:
+        f.write(updated_content)
 
 def main():
-    problems = scan()
-    write_docs(problems)
+    problems = read_solved_problems()
+    write_problems_list(problems)
     update_readme(problems)
+    print(f"Updated README.md with {len(problems)} problems and titles.")
 
 if __name__ == "__main__":
     main()
